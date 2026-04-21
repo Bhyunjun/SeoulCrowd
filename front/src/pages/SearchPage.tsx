@@ -1,6 +1,7 @@
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { fetchPopulation } from "../utils/populationCache";
 
 type ApiPopulation = {
   areaName: string;
@@ -20,11 +21,25 @@ type PlacePayload = {
   address?: string;
 };
 
-const API_URL = "/api/population";
+const RECENT_KEY = "recentSearches";
+const MAX_RECENT = 10;
 
 const formatPop = (n: number | null | undefined) => {
   if (n == null) return "-";
   return n >= 10000 ? `${(n / 10000).toFixed(1)}만` : n.toLocaleString("ko-KR");
+};
+
+const getRecentSearches = (): string[] => {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+};
+
+const addRecentSearch = (name: string) => {
+  const prev = getRecentSearches().filter((n) => n !== name);
+  localStorage.setItem(RECENT_KEY, JSON.stringify([name, ...prev].slice(0, MAX_RECENT)));
 };
 
 export default function SearchPage() {
@@ -35,16 +50,14 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [places, setPlaces] = useState<ApiPopulation[]>([]);
+  const [recentSearches, setRecentSearches] = useState<string[]>(getRecentSearches);
 
   useEffect(() => {
     const fetchPlaces = async () => {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(API_URL);
-        if (!res.ok) throw new Error("검색 데이터를 불러오지 못했습니다.");
-        const json = await res.json();
-        const list: ApiPopulation[] = json.data ?? [];
+        const list = await fetchPopulation();
         setPlaces(list);
       } catch (e) {
         const message = e instanceof Error ? e.message : "알 수 없는 오류가 발생했습니다.";
@@ -58,9 +71,35 @@ export default function SearchPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim();
-    if (!q) return places.slice(0, 12);
+    if (!q) return [];
     return places.filter((p) => p.areaName.includes(q)).slice(0, 12);
   }, [places, query]);
+
+  const recentPlaces = useMemo(() => {
+    return recentSearches
+      .map((name) => places.find((p) => p.areaName === name))
+      .filter((p): p is ApiPopulation => p !== undefined);
+  }, [recentSearches, places]);
+
+  const handlePlaceClick = (p: ApiPopulation) => {
+    addRecentSearch(p.areaName);
+    setRecentSearches(getRecentSearches());
+    const payload: PlacePayload = {
+      name: p.areaName,
+      tag: p.congestionLevel,
+      population: formatPop(p.populationMax),
+      populationRange: `${formatPop(p.populationMin)} ~ ${formatPop(p.populationMax)}`,
+      populationMaxRaw: p.populationMax,
+    };
+    navigate(`/report/${encodeURIComponent(p.areaName)}`, { state: { place: payload } });
+  };
+
+  const clearRecent = () => {
+    localStorage.removeItem(RECENT_KEY);
+    setRecentSearches([]);
+  };
+
+  const showRecent = query.trim() === "";
 
   return (
     <div style={s.bg}>
@@ -86,40 +125,40 @@ export default function SearchPage() {
 
         <div style={s.content}>
           {loading && <div style={s.stateText}>검색 데이터를 불러오는 중...</div>}
+
           {!loading && error && <div style={s.stateText}>{error}</div>}
-          {!loading && !error && filtered.length === 0 && <div style={s.stateText}>검색 결과가 없습니다.</div>}
 
-          {!loading &&
-            !error &&
-            filtered.map((p) => {
-              const payload: PlacePayload = {
-                name: p.areaName,
-                tag: p.congestionLevel,
-                population: formatPop(p.populationMax),
-                populationRange: `${formatPop(p.populationMin)} ~ ${formatPop(p.populationMax)}`,
-                populationMaxRaw: p.populationMax,
-              };
-
-              return (
-                <div
-                  key={p.areaName}
-                  style={s.resultItem}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() =>
-                    navigate(`/report/${encodeURIComponent(p.areaName)}`, {
-                      state: { place: payload },
-                    })
-                  }
-                >
-                  <div style={s.resultName}>{p.areaName}</div>
-                  <div style={s.resultMeta}>
-                    <span style={s.resultChip}>{p.congestionLevel}</span>
-                    <span style={s.resultPop}>{formatPop(p.populationMax)}</span>
+          {!loading && !error && showRecent && (
+            <>
+              {recentPlaces.length === 0 ? (
+                <div style={s.stateText}>최근 검색한 장소가 없습니다.</div>
+              ) : (
+                <>
+                  <div style={s.sectionHeader}>
+                    <span style={s.sectionTitle}>최근 검색</span>
+                    <button type="button" style={s.clearRecentBtn} onClick={clearRecent}>
+                      전체 삭제
+                    </button>
                   </div>
-                </div>
-              );
-            })}
+                  {recentPlaces.map((p) => (
+                    <PlaceRow key={p.areaName} place={p} onClick={() => handlePlaceClick(p)} />
+                  ))}
+                </>
+              )}
+            </>
+          )}
+
+          {!loading && !error && !showRecent && (
+            <>
+              {filtered.length === 0 ? (
+                <div style={s.stateText}>검색 결과가 없습니다.</div>
+              ) : (
+                filtered.map((p) => (
+                  <PlaceRow key={p.areaName} place={p} onClick={() => handlePlaceClick(p)} />
+                ))
+              )}
+            </>
+          )}
         </div>
 
         <div style={s.bottomNav}>
@@ -154,6 +193,24 @@ export default function SearchPage() {
             </span>
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PlaceRow({ place, onClick }: { place: ApiPopulation; onClick: () => void }) {
+  return (
+    <div
+      style={s.resultItem}
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => e.key === "Enter" && onClick()}
+    >
+      <div style={s.resultName}>{place.areaName}</div>
+      <div style={s.resultMeta}>
+        <span style={s.resultChip}>{place.congestionLevel}</span>
+        <span style={s.resultPop}>{formatPop(place.populationMax)}</span>
       </div>
     </div>
   );
@@ -235,6 +292,26 @@ const s: Record<string, React.CSSProperties> = {
   },
   content: { flex: 1, padding: "0 14px 14px", overflowY: "auto" },
   stateText: { textAlign: "center", color: "#7a90a4", padding: "18px 0" },
+  sectionHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "8px 2px 10px",
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: 900,
+    color: "#1a2a3a",
+  },
+  clearRecentBtn: {
+    border: "none",
+    background: "none",
+    color: "#90aac0",
+    fontSize: 12,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    padding: 0,
+  },
   resultItem: {
     background: "rgba(255,255,255,0.9)",
     borderRadius: 18,
@@ -277,4 +354,3 @@ const s: Record<string, React.CSSProperties> = {
   },
   navLabel: { fontSize: 10, fontWeight: 500 },
 };
-

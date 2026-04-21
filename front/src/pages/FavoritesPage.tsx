@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { fetchPopulation } from "../utils/populationCache";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Place {
@@ -18,7 +19,7 @@ type PopulationItem = {
   populationMax?: number;
 };
 
-const getAccessToken = () => localStorage.getItem("accessToken");
+const getAccessToken = () => sessionStorage.getItem("accessToken");
 const authFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
   const token = getAccessToken();
   const headers = new Headers(init.headers);
@@ -80,24 +81,19 @@ export default function FavoritesPage() {
       setLoading(true);
       setError(null);
 
-      const [favRes, popRes] = await Promise.all([
+      const [favRes, list] = await Promise.all([
         authFetch("/api/favorites"),
-        fetch("/api/population"),
+        fetchPopulation(),
       ]);
 
       if (!favRes.ok) {
         const msg = await favRes.json().catch(() => null);
         throw new Error(msg?.message ?? "즐겨찾기 목록을 불러오지 못했습니다.");
       }
-      if (!popRes.ok) {
-        throw new Error("인구 데이터를 불러오지 못했습니다.");
-      }
 
       const favJson = await favRes.json();
-      const popJson = await popRes.json();
 
       const names: string[] = favJson.favorites ?? [];
-      const list: PopulationItem[] = popJson.data ?? [];
       const map = new Map<string, PopulationItem>();
       list.forEach((p) => map.set(p.areaName, p));
 

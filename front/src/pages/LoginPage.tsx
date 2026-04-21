@@ -36,7 +36,7 @@ export default function LoginPage() {
         return;
       }
 
-      localStorage.setItem("accessToken", data.token);
+      sessionStorage.setItem("accessToken", data.token);
 
       const meRes = await fetch("/api/auth/me", {
         headers: { Authorization: `Bearer ${data.token}` },
@@ -49,7 +49,7 @@ export default function LoginPage() {
       };
 
       if (!meRes.ok || !meData.success) {
-        localStorage.removeItem("accessToken");
+        sessionStorage.removeItem("accessToken");
         alert(meData.message ?? "세션을 확인할 수 없습니다.");
         return;
       }

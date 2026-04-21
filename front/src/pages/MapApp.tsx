@@ -1,6 +1,7 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { fetchPopulation } from "../utils/populationCache";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface PlaceInfo {
@@ -35,9 +36,14 @@ declare global {
 type NaverMapsNamespace = {
   Map: new (el: HTMLElement, opts: { center: unknown; zoom: number }) => unknown;
   LatLng: new (lat: number, lng: number) => unknown;
-  Marker: new (opts: { position: unknown; map: unknown; icon: { content: string; anchor: unknown }; title: string }) => unknown;
+  Marker: new (opts: { position: unknown; map: unknown; icon: { content: string | HTMLElement; anchor: unknown }; title: string }) => unknown;
   Point: new (x: number, y: number) => unknown;
   Event: { addListener: (target: unknown, eventName: string, handler: () => void) => void };
+};
+
+type NaverMapInstance = {
+  setCenter: (latlng: unknown) => void;
+  setZoom: (level: number) => void;
 };
 
 const getNaverMaps = (): NaverMapsNamespace | null => {
@@ -48,7 +54,7 @@ const getNaverMaps = (): NaverMapsNamespace | null => {
   return maps as NaverMapsNamespace;
 };
 
-const getAccessToken = () => localStorage.getItem("accessToken");
+const getAccessToken = () => sessionStorage.getItem("accessToken");
 const authFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
   const token = getAccessToken();
   const headers = new Headers(init.headers);
@@ -61,6 +67,13 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
 const estimateCrowdPercent = (populationMaxRaw?: number) => {
   if (typeof populationMaxRaw !== "number") return null;
   return clamp(Math.round((populationMaxRaw / 50000) * 100), 1, 100);
+};
+
+const congestionColor = (tag: string) => {
+  if (tag.includes("붐빔")) return "#f44336";
+  if (tag.includes("약간")) return "#ff9800";
+  if (tag.includes("여유")) return "#4caf50";
+  return "#90aac0";
 };
 
 const statusLabelFromTag = (tag: string) => {
@@ -80,10 +93,15 @@ export default function MapApp() {
   const [sheetVisible, setSheetVisible] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<PlaceInfo | null>(null);
   const [searchValue, setSearchValue] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [placesFromApi, setPlacesFromApi] = useState<(PlaceInfo & { lat: number; lng: number })[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [favoriteNames, setFavoriteNames] = useState<string[]>([]);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
+
+  const suggestions = searchValue.trim().length > 0
+    ? placesFromApi.filter((p) => p.name.includes(searchValue.trim())).slice(0, 6)
+    : [];
 
   // 1. 네이버 지도 스크립트 로드
   useEffect(() => {
@@ -101,7 +119,7 @@ export default function MapApp() {
     document.head.appendChild(script);
   }, []);
 
-  // 2. 인구 데이터 로드
+  // 2. 인구 데이터 로드 (15분 캐시)
   useEffect(() => {
     const formatPop = (n: number | null | undefined) => {
       if (n == null) return "-";
@@ -110,9 +128,7 @@ export default function MapApp() {
 
     const fetchData = async () => {
       try {
-        const res = await fetch(API_URL);
-        const json = await res.json();
-        const list: ApiPopulation[] = json.data ?? [];
+        const list = await fetchPopulation();
 
         const mapped = list
           .filter((p) => typeof p.latitude === "number" && typeof p.longitude === "number")
@@ -128,8 +144,8 @@ export default function MapApp() {
 
         setPlacesFromApi(mapped);
         setLastUpdatedAt(new Date());
-        if (mapped.length > 0 && !selectedPlace) {
-          setSelectedPlace(mapped[0]);
+        if (mapped.length > 0) {
+          setSelectedPlace((prev) => prev ?? mapped[0]);
         }
       } catch (error) {
         console.error("인구 데이터 불러오기 실패:", error);
@@ -137,7 +153,7 @@ export default function MapApp() {
     };
 
     fetchData();
-  }, [selectedPlace]);
+  }, []);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -161,6 +177,19 @@ export default function MapApp() {
     if (res.ok && json?.success && Array.isArray(json?.favorites)) {
       setFavoriteNames(json.favorites);
     }
+  };
+
+  const panToPlace = (place: PlaceInfo & { lat: number; lng: number }) => {
+    const maps = getNaverMaps();
+    if (maps && naverMapInstance.current) {
+      const mapInst = naverMapInstance.current as NaverMapInstance;
+      mapInst.setCenter(new maps.LatLng(place.lat, place.lng));
+      mapInst.setZoom(15);
+    }
+    setSelectedPlace(place);
+    setSheetVisible(true);
+    setSearchValue("");
+    setShowSuggestions(false);
   };
 
   const toggleFavorite = async () => {
@@ -221,16 +250,34 @@ export default function MapApp() {
     if (!maps || !naverMapInstance.current || placesFromApi.length === 0) return;
 
     placesFromApi.forEach((place) => {
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "position:relative;cursor:pointer;";
+
+      const dot = document.createElement("div");
+      dot.style.cssText = "width:12px;height:12px;background:#2196f3;border-radius:50%;box-shadow:0 2px 8px rgba(33,150,243,0.5);";
+
+      const label = document.createElement("div");
+      label.textContent = place.name;
+      label.style.cssText = "position:absolute;bottom:18px;left:50%;transform:translateX(-50%) translateY(4px);background:rgba(255,255,255,0.95);backdrop-filter:blur(8px);border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.15);pointer-events:none;opacity:0;transition:opacity 0.15s,transform 0.15s;color:#1a2a3a;border:1px solid rgba(33,150,243,0.12);font-family:'Noto Sans KR',sans-serif;";
+
+      wrap.appendChild(dot);
+      wrap.appendChild(label);
+
       const marker = new maps.Marker({
         position: new maps.LatLng(place.lat, place.lng),
         map: naverMapInstance.current,
-        icon: {
-          content: `<div style="width:12px;height:12px;background:#2196f3;border-radius:50%;box-shadow:0 2px 8px rgba(33,150,243,0.5);cursor:pointer;"></div>`,
-          anchor: new maps.Point(6, 6),
-        },
+        icon: { content: wrap, anchor: new maps.Point(6, 6) },
         title: place.name,
       });
 
+      wrap.addEventListener("mouseenter", () => {
+        label.style.opacity = "1";
+        label.style.transform = "translateX(-50%) translateY(0)";
+      });
+      wrap.addEventListener("mouseleave", () => {
+        label.style.opacity = "0";
+        label.style.transform = "translateX(-50%) translateY(4px)";
+      });
       maps.Event.addListener(marker, "click", () => {
         setSelectedPlace(place);
         setSheetVisible(true);
@@ -254,13 +301,44 @@ export default function MapApp() {
           <div style={styles.searchBar}>
             <div style={styles.searchWrap}>
               <SearchIcon />
-              <input 
-                style={styles.searchInput} 
-                placeholder="장소 검색" 
+              <input
+                style={styles.searchInput}
+                placeholder="장소 검색"
                 value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
+                onChange={(e) => {
+                  setSearchValue(e.target.value);
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && suggestions.length > 0) panToPlace(suggestions[0]);
+                  if (e.key === "Escape") { setSearchValue(""); setShowSuggestions(false); }
+                }}
               />
+              {searchValue.length > 0 && (
+                <button
+                  style={styles.searchClearBtn}
+                  onMouseDown={(e) => { e.preventDefault(); setSearchValue(""); setShowSuggestions(false); }}
+                >✕</button>
+              )}
             </div>
+            {showSuggestions && suggestions.length > 0 && (
+              <div style={styles.suggestionList}>
+                {suggestions.map((place) => (
+                  <div
+                    key={place.name}
+                    style={styles.suggestionItem}
+                    onMouseDown={() => panToPlace(place)}
+                  >
+                    <span style={styles.suggestionName}>{place.name}</span>
+                    <span style={{ ...styles.suggestionChip, color: congestionColor(place.tag), background: congestionColor(place.tag) + "18" }}>
+                      {place.tag}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div style={styles.timeBadge}>
             <span style={styles.timeDot} />
@@ -272,6 +350,20 @@ export default function MapApp() {
               🌙
             </span>
           </div>
+          <button
+            style={styles.logoutBtn}
+            onClick={() => {
+              sessionStorage.removeItem("accessToken");
+              navigate("/login", { replace: true });
+            }}
+            title="로그아웃"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7a90a4" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
         </div>
 
         {/* ── Bottom Sheet ── */}
@@ -402,7 +494,13 @@ const styles: Record<string, React.CSSProperties> = {
   searchBar: { position: "absolute", top: 20, left: 20, right: 20, zIndex: 10 },
   searchWrap: { background: "rgba(255,255,255,0.9)", borderRadius: 16, padding: "12px 18px", display: "flex", alignItems: "center", gap: 10, backdropFilter: "blur(10px)" },
   searchInput: { border: "none", background: "transparent", outline: "none", width: "100%" },
+  searchClearBtn: { border: "none", background: "none", cursor: "pointer", color: "#b0c4d4", fontSize: 14, padding: "0 2px", lineHeight: 1 },
+  suggestionList: { marginTop: 6, background: "rgba(255,255,255,0.97)", borderRadius: 14, backdropFilter: "blur(16px)", boxShadow: "0 8px 32px rgba(33,150,243,0.13)", overflow: "hidden" },
+  suggestionItem: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 16px", cursor: "pointer", borderBottom: "1px solid rgba(33,150,243,0.06)", gap: 10 },
+  suggestionName: { fontSize: 13, fontWeight: 700, color: "#1a2a3a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  suggestionChip: { fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "3px 8px", flexShrink: 0 },
   timeBadge: { position: "absolute", top: 74, right: 20, zIndex: 10, background: "rgba(255,255,255,0.9)", borderRadius: 20, padding: "6px 14px", display: "flex", alignItems: "center", gap: 6, fontSize: 13 },
+  logoutBtn: { position: "absolute", top: 74, left: 20, zIndex: 10, background: "rgba(255,255,255,0.9)", border: "none", borderRadius: 20, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6, cursor: "pointer", backdropFilter: "blur(10px)", fontSize: 12, color: "#7a90a4", fontWeight: 600 },
   timeDot: { width: 7, height: 7, borderRadius: "50%", background: "#2196f3" },
   bottomSheet: { position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 20, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(20px)", borderRadius: "24px 24px 0 0", padding: "12px 20px 30px", boxShadow: "0 -8px 40px rgba(0,0,0,0.1)", transition: "transform 0.35s ease-out" },
   sheetHandle: { width: 40, height: 4, background: "#d0dfe8", borderRadius: 2, margin: "0 auto 16px" },

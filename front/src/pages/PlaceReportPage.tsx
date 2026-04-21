@@ -1,6 +1,7 @@
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { fetchPopulation } from "../utils/populationCache";
 
 type HistoryPoint = {
   updatedAt: string;       // "2026-04-20 08:30"
@@ -18,7 +19,7 @@ type PlacePayload = {
   address?: string;
 };
 
-const getAccessToken = () => localStorage.getItem("accessToken");
+const getAccessToken = () => sessionStorage.getItem("accessToken");
 const authFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
   const token = getAccessToken();
   const headers = new Headers(init.headers);
@@ -64,11 +65,35 @@ function TrendMiniChart({ percent, historyData }: {
 }) {
   const points = useMemo(() => {
     if (historyData && historyData.length > 0) {
-      const maxPop = Math.max(...historyData.map(d => d.populationMax));
-      return historyData.map(d => ({
-        x: parseInt(d.updatedAt.split(" ")[1].split(":")[0], 10),
-        y: clamp(d.populationMax / maxPop, 0.06, 0.98),
-      }));
+      const valid = historyData.filter(d => typeof d.updatedAt === "string" && d.updatedAt.includes(" "));
+      if (valid.length === 0) return makeTrendPoints(percent);
+
+      // 시간별 populationMax 평균
+      const hourMap = new Map<number, number[]>();
+      valid.forEach(d => {
+        const h = parseInt(d.updatedAt.split(" ")[1].split(":")[0], 10) || 0;
+        if (!hourMap.has(h)) hourMap.set(h, []);
+        hourMap.get(h)!.push(d.populationMax);
+      });
+      const known = Array.from(hourMap.entries())
+        .map(([h, vals]) => ({ h, v: vals.reduce((a, b) => a + b, 0) / vals.length }))
+        .sort((a, b) => a.h - b.h);
+
+      const maxPop = Math.max(...known.map(p => p.v)) || 1;
+
+      // 0~23 전체 보간
+      return Array.from({ length: 24 }, (_, h) => {
+        const exact = known.find(k => k.h === h);
+        if (exact) return { x: h, y: clamp(exact.v / maxPop, 0.06, 0.98) };
+
+        const prev = [...known].reverse().find(k => k.h < h);
+        const next = known.find(k => k.h > h);
+        if (prev && next) {
+          const t = (h - prev.h) / (next.h - prev.h);
+          return { x: h, y: clamp((prev.v + t * (next.v - prev.v)) / maxPop, 0.06, 0.98) };
+        }
+        return { x: h, y: clamp((prev ?? next)!.v / maxPop, 0.06, 0.98) };
+      });
     }
     return makeTrendPoints(percent);
   }, [percent, historyData]);
@@ -91,8 +116,13 @@ function TrendMiniChart({ percent, historyData }: {
 
   return (
     <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }}>
-      <path d={d} fill="none" stroke="#64b5f6" strokeWidth="3" strokeLinecap="round" />
-      <path d={d} fill="none" stroke="rgba(33,150,243,0.25)" strokeWidth="10" strokeLinecap="round" />
+      <defs>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="2.5" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+      <path d={d} fill="none" stroke="#64b5f6" strokeWidth="3" strokeLinecap="round" filter="url(#glow)" />
       <circle cx={toX(currentPoint.x)} cy={toY(currentPoint.y)} r="5" fill="#2196f3" />
     </svg>
   );
@@ -139,32 +169,21 @@ export default function PlaceReportPage() {
   useEffect(() => {
     if (!place) return;
     if (statePlace?.populationMaxRaw != null) return;
-    // state 없이 직접 진입 시 최소 데이터 보강
-    fetch("/api/population")
-      .then((r) => r.json())
-      .then((j) => {
-        const list: unknown[] = (j as { data?: unknown[] } | null)?.data ?? [];
-        const found = list.find((x) => {
-          if (!x || typeof x !== "object") return false;
-          return (x as { areaName?: unknown }).areaName === place.name;
-        });
+    // state 없이 직접 진입 시 최소 데이터 보강 (15분 캐시)
+    fetchPopulation()
+      .then((list) => {
+        const found = list.find((x) => x.areaName === place.name);
         if (!found) return;
-        const f = found as {
-          areaName?: string;
-          congestionLevel?: string;
-          populationMin?: number;
-          populationMax?: number;
-        };
         setPlace((prev) =>
           prev
             ? {
                 ...prev,
-                tag: f.congestionLevel ?? prev.tag,
-                populationMaxRaw: typeof f.populationMax === "number" ? f.populationMax : prev.populationMaxRaw,
-                population: typeof f.populationMax === "number" ? `${(f.populationMax / 10000).toFixed(1)}만` : prev.population,
+                tag: found.congestionLevel ?? prev.tag,
+                populationMaxRaw: typeof found.populationMax === "number" ? found.populationMax : prev.populationMaxRaw,
+                population: typeof found.populationMax === "number" ? `${(found.populationMax / 10000).toFixed(1)}만` : prev.population,
                 populationRange:
-                  typeof f.populationMin === "number" && typeof f.populationMax === "number"
-                    ? `${(f.populationMin / 10000).toFixed(1)}만 ~ ${(f.populationMax / 10000).toFixed(1)}만`
+                  typeof found.populationMin === "number" && typeof found.populationMax === "number"
+                    ? `${(found.populationMin / 10000).toFixed(1)}만 ~ ${(found.populationMax / 10000).toFixed(1)}만`
                     : prev.populationRange,
               }
             : prev,
@@ -228,14 +247,16 @@ export default function PlaceReportPage() {
   };
 
   const peakHour = useMemo(() => {
-    if (!historyData.length) return "오후 7:00";
-    const peak = historyData.reduce((a, b) => a.populationMax > b.populationMax ? a : b);
+    const valid = historyData.filter(d => typeof d.updatedAt === "string" && d.updatedAt.includes(" "));
+    if (!valid.length) return "오후 7:00";
+    const peak = valid.reduce((a, b) => a.populationMax > b.populationMax ? a : b);
     return peak.updatedAt.split(" ")[1];
   }, [historyData]);
-  
+
   const quietHour = useMemo(() => {
-    if (!historyData.length) return "오전 4:00";
-    const quiet = historyData.reduce((a, b) => a.populationMax < b.populationMax ? a : b);
+    const valid = historyData.filter(d => typeof d.updatedAt === "string" && d.updatedAt.includes(" "));
+    if (!valid.length) return "오전 4:00";
+    const quiet = valid.reduce((a, b) => a.populationMax < b.populationMax ? a : b);
     return quiet.updatedAt.split(" ")[1];
   }, [historyData]);
 
