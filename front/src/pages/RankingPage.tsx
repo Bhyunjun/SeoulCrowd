@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { apiUrl } from "../api/client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type TabType = "busy" | "free";
@@ -42,7 +43,7 @@ export default function RankingPage() {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch("/api/population/ranking/top");
+        const res = await fetch(apiUrl("/api/population/ranking/top"));
         if (!res.ok) {
           throw new Error("랭킹 데이터를 불러오지 못했습니다.");
         }

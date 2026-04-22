@@ -2,6 +2,7 @@ import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { fetchPopulation } from "../utils/populationCache";
+import { apiUrl, apiFetch, getAccessToken } from "../api/client";
 
 type HistoryPoint = {
   updatedAt: string;       // "2026-04-20 08:30"
@@ -17,15 +18,6 @@ type PlacePayload = {
   populationRange?: string;
   populationMaxRaw?: number;
   address?: string;
-};
-
-const getAccessToken = () => sessionStorage.getItem("accessToken");
-const authFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
-  const token = getAccessToken();
-  const headers = new Headers(init.headers);
-  headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(input, { ...init, headers });
 };
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
@@ -149,7 +141,7 @@ export default function PlaceReportPage() {
 
   useEffect(() => {
   if (!place?.name) return;
-  fetch(`/api/population/${encodeURIComponent(place.name)}/history`)
+  fetch(apiUrl(`/api/population/${encodeURIComponent(place.name)}/history`))
     .then(r => r.json())
     .then(json => {
       if (Array.isArray(json?.data)) setHistoryData(json.data);
@@ -160,7 +152,7 @@ export default function PlaceReportPage() {
   useEffect(() => {
     const token = getAccessToken();
     if (!token) return;
-    authFetch("/api/favorites")
+    apiFetch("/api/favorites")
       .then((r) => r.json())
       .then((j) => setFavoriteNames(Array.isArray(j?.favorites) ? j.favorites : []))
       .catch(() => {});
@@ -201,7 +193,7 @@ export default function PlaceReportPage() {
       setFavoriteNames([]);
       return;
     }
-    const res = await authFetch("/api/favorites");
+    const res = await apiFetch("/api/favorites");
     const json = await res.json().catch(() => null);
     if (res.ok && json?.success && Array.isArray(json?.favorites)) {
       setFavoriteNames(json.favorites);
@@ -219,8 +211,8 @@ export default function PlaceReportPage() {
     try {
       setFavoriteBusy(true);
       const res = isBookmarked
-        ? await authFetch(`/api/favorites/${encodeURIComponent(place.name)}`, { method: "DELETE" })
-        : await authFetch("/api/favorites", {
+        ? await apiFetch(`/api/favorites/${encodeURIComponent(place.name)}`, { method: "DELETE" })
+        : await apiFetch("/api/favorites", {
             method: "POST",
             body: JSON.stringify({ placeName: place.name }),
           });

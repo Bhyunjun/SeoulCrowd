@@ -2,6 +2,7 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { fetchPopulation } from "../utils/populationCache";
+import { getAccessToken, apiFetch } from "../api/client";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface PlaceInfo {
@@ -13,18 +14,8 @@ interface PlaceInfo {
   address?: string;
 }
 
-interface ApiPopulation {
-  areaName: string;
-  congestionLevel: string;
-  populationMin: number;
-  populationMax: number;
-  latitude: number;
-  longitude: number;
-}
-
 // ─── Constants ───────────────────────────────────────────────────────────────
 const NAVER_CLIENT_ID = "hr1545a1u5";
-const API_URL = "/api/population";
 
 // ─── Declare naver global ───────────────────────────────────────────────────
 declare global {
@@ -52,15 +43,6 @@ const getNaverMaps = (): NaverMapsNamespace | null => {
   const maps = (naverObj as { maps?: unknown }).maps;
   if (!maps || typeof maps !== "object") return null;
   return maps as NaverMapsNamespace;
-};
-
-const getAccessToken = () => sessionStorage.getItem("accessToken");
-const authFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
-  const token = getAccessToken();
-  const headers = new Headers(init.headers);
-  headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(input, { ...init, headers });
 };
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
@@ -158,7 +140,7 @@ export default function MapApp() {
   useEffect(() => {
     const token = getAccessToken();
     if (!token) return;
-    authFetch("/api/favorites")
+    apiFetch("/api/favorites")
       .then((r) => r.json())
       .then((j) => setFavoriteNames(Array.isArray(j?.favorites) ? j.favorites : []))
       .catch(() => {});
@@ -172,7 +154,7 @@ export default function MapApp() {
       setFavoriteNames([]);
       return;
     }
-    const res = await authFetch("/api/favorites");
+    const res = await apiFetch("/api/favorites");
     const json = await res.json().catch(() => null);
     if (res.ok && json?.success && Array.isArray(json?.favorites)) {
       setFavoriteNames(json.favorites);
@@ -204,8 +186,8 @@ export default function MapApp() {
       setFavoriteBusy(true);
       const placeName = selectedPlace.name;
       const res = isBookmarked
-        ? await authFetch(`/api/favorites/${encodeURIComponent(placeName)}`, { method: "DELETE" })
-        : await authFetch("/api/favorites", {
+        ? await apiFetch(`/api/favorites/${encodeURIComponent(placeName)}`, { method: "DELETE" })
+        : await apiFetch("/api/favorites", {
             method: "POST",
             body: JSON.stringify({ placeName }),
           });

@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { GoogleOAuthProvider, GoogleLogin, type CredentialResponse } from "@react-oauth/google";
+import { apiUrl } from "../api/client";
 
 // 백엔드 GOOGLE_CLIENT_ID 와 동일한 "웹 클라이언트" ID (우선순위: .env.local 의 VITE_GOOGLE_CLIENT_ID)
 const CLIENT_ID =
@@ -18,7 +19,7 @@ export default function LoginPage() {
     }
 
     try {
-      const response = await fetch("/api/auth/google", {
+      const response = await fetch(apiUrl("/api/auth/google"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ credential: googleToken }),
@@ -38,7 +39,7 @@ export default function LoginPage() {
 
       sessionStorage.setItem("accessToken", data.token);
 
-      const meRes = await fetch("/api/auth/me", {
+      const meRes = await fetch(apiUrl("/api/auth/me"), {
         headers: { Authorization: `Bearer ${data.token}` },
       });
 

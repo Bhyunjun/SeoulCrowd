@@ -1,3 +1,5 @@
+import { apiUrl } from "../api/client";
+
 const CACHE_KEY = "population_cache_data";
 const CACHE_TS_KEY = "population_cache_ts";
 const CACHE_TTL = 15 * 60 * 1000;
@@ -23,7 +25,7 @@ export async function fetchPopulation(): Promise<ApiPopulationRaw[]> {
     }
   }
 
-  const res = await fetch("/api/population");
+  const res = await fetch(apiUrl("/api/population"));
   if (!res.ok) throw new Error("인구 데이터를 불러오지 못했습니다.");
   const json = await res.json();
   const list: ApiPopulationRaw[] = json.data ?? [];

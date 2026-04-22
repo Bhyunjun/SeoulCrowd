@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { fetchPopulation } from "../utils/populationCache";
+import { apiFetch, getAccessToken } from "../api/client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Place {
@@ -17,15 +18,6 @@ type PopulationItem = {
   congestionLevel: string;
   populationMin?: number;
   populationMax?: number;
-};
-
-const getAccessToken = () => sessionStorage.getItem("accessToken");
-const authFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
-  const token = getAccessToken();
-  const headers = new Headers(init.headers);
-  headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(input, { ...init, headers });
 };
 
 const getErrorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
@@ -82,7 +74,7 @@ export default function FavoritesPage() {
       setError(null);
 
       const [favRes, list] = await Promise.all([
-        authFetch("/api/favorites"),
+        apiFetch("/api/favorites"),
         fetchPopulation(),
       ]);
 
@@ -114,7 +106,7 @@ export default function FavoritesPage() {
   const removeFavorite = async (placeName: string) => {
     try {
       setError(null);
-      const res = await authFetch(`/api/favorites/${encodeURIComponent(placeName)}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/favorites/${encodeURIComponent(placeName)}`, { method: "DELETE" });
 
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success) {
