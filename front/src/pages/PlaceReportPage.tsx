@@ -291,7 +291,7 @@ export default function PlaceReportPage() {
     <div style={{ ...s.wrap, background: palette.bg, color: palette.text }}>
       <div style={s.shell}>
         <div style={s.topRow}>
-          <button type="button" onClick={() => navigate(-1)} style={{ ...s.backBtn, background: palette.surface }}>
+          <button type="button" onClick={() => navigate(-1)} style={{ ...s.backBtn, background: "transparent" }}>
             ←
           </button>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -302,7 +302,7 @@ export default function PlaceReportPage() {
               <button
                 type="button"
                 onClick={toggleFavorite}
-                style={{ ...s.starBtn, background: palette.surface, opacity: favoriteBusy ? 0.6 : 1 }}
+                style={{ ...s.starBtn, background: "transparent", opacity: favoriteBusy ? 0.6 : 1 }}
                 aria-label="즐겨찾기"
                 title="즐겨찾기"
               >
@@ -313,7 +313,7 @@ export default function PlaceReportPage() {
               {place.address ?? "서울, 대한민국"}
             </div>
           </div>
-          <button type="button" style={{ ...s.smallBtn, background: palette.surface }}>공유</button>
+          <button type="button" style={{ ...s.smallBtn, background: "transparent" }}>공유</button>
         </div>
 
         <div style={s.grid}>
