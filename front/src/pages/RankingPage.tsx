@@ -66,7 +66,11 @@ export default function RankingPage() {
           const min = item.populationMin;
           const max = item.populationMax;
           const avg = typeof min === "number" && typeof max === "number" ? Math.round((min + max) / 2) : null;
-          const populationText = avg !== null ? `${(avg / 10000).toFixed(1)}만명` : "-";
+          const populationText = avg === null
+            ? "-"
+            : avg >= 10000
+              ? `${(avg / 10000).toFixed(1)}만명`
+              : `${avg.toLocaleString("ko-KR")}명`;
 
           return {
             id: index + 1,

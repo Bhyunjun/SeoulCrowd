@@ -52,16 +52,18 @@ const estimateCrowdPercent = (populationMaxRaw?: number) => {
 };
 
 const congestionColor = (tag: string) => {
-  if (tag.includes("붐빔")) return "#f44336";
   if (tag.includes("약간")) return "#ff9800";
+  if (tag.includes("붐빔")) return "#f44336";
+  if (tag.includes("보통")) return "#ffc107";
   if (tag.includes("여유")) return "#4caf50";
   return "#90aac0";
 };
 
 const statusLabelFromTag = (tag: string) => {
+  if (tag.includes("약간")) return { label: "약간 붐빔", color: "#ff9800", bg: "#fff3e0" };
   if (tag.includes("붐빔")) return { label: "혼잡", color: "#f44336", bg: "#fdecea" };
-  if (tag.includes("약간")) return { label: "주의", color: "#ff9800", bg: "#fff3e0" };
-  if (tag.includes("여유")) return { label: "원활", color: "#4caf50", bg: "#e8f5e9" };
+  if (tag.includes("보통")) return { label: "보통", color: "#ffc107", bg: "#fffde7" };
+  if (tag.includes("여유")) return { label: "여유", color: "#4caf50", bg: "#e8f5e9" };
   return { label: "확인 중", color: "#90aac0", bg: "#eef4f8" };
 };
 
@@ -235,12 +237,13 @@ export default function MapApp() {
       const wrap = document.createElement("div");
       wrap.style.cssText = "position:relative;cursor:pointer;";
 
+      const color = congestionColor(place.tag);
       const dot = document.createElement("div");
-      dot.style.cssText = "width:12px;height:12px;background:#2196f3;border-radius:50%;box-shadow:0 2px 8px rgba(33,150,243,0.5);";
+      dot.style.cssText = `width:12px;height:12px;background:${color};border-radius:50%;box-shadow:0 2px 8px ${color}80;`;
 
       const label = document.createElement("div");
       label.textContent = place.name;
-      label.style.cssText = "position:absolute;bottom:18px;left:50%;transform:translateX(-50%) translateY(4px);background:rgba(255,255,255,0.95);backdrop-filter:blur(8px);border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.15);pointer-events:none;opacity:0;transition:opacity 0.15s,transform 0.15s;color:#1a2a3a;border:1px solid rgba(33,150,243,0.12);font-family:'Noto Sans KR',sans-serif;";
+      label.style.cssText = `position:absolute;bottom:18px;left:50%;transform:translateX(-50%) translateY(4px);background:rgba(255,255,255,0.95);backdrop-filter:blur(8px);border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.15);pointer-events:none;opacity:0;transition:opacity 0.15s,transform 0.15s;color:#1a2a3a;border:1px solid ${color}30;font-family:'Noto Sans KR',sans-serif;`;
 
       wrap.appendChild(dot);
       wrap.appendChild(label);
