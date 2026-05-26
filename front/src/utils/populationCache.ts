@@ -1,4 +1,5 @@
 import { apiUrl } from "../api/client";
+import { isDesignReviewMode, MOCK_POPULATION } from "./designReviewMock";
 
 const CACHE_KEY = "population_cache_data";
 const CACHE_TS_KEY = "population_cache_ts";
@@ -14,6 +15,8 @@ export type ApiPopulationRaw = {
 };
 
 export async function fetchPopulation(): Promise<ApiPopulationRaw[]> {
+  if (isDesignReviewMode()) return MOCK_POPULATION;
+
   const ts = localStorage.getItem(CACHE_TS_KEY);
   const cached = localStorage.getItem(CACHE_KEY);
 

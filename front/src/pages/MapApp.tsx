@@ -1,8 +1,10 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { fetchPopulation } from "../utils/populationCache";
 import { getAccessToken, apiFetch } from "../api/client";
+import { AppLayout } from "../components/AppLayout";
+import { colors, typography, spacing, radius, shadow, congestionByTag } from "../styles/theme";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface PlaceInfo {
@@ -51,27 +53,24 @@ const estimateCrowdPercent = (populationMaxRaw?: number) => {
   return clamp(Math.round((populationMaxRaw / 50000) * 100), 1, 100);
 };
 
-const congestionColor = (tag: string) => {
-  if (tag.includes("약간")) return "#ff9800";
-  if (tag.includes("붐빔")) return "#f44336";
-  if (tag.includes("보통")) return "#ffc107";
-  if (tag.includes("여유")) return "#4caf50";
-  return "#90aac0";
-};
+// 마커 점 색상 (강한 채도) — congestionByTag의 bg 사용
+const congestionDotColor = (tag: string) => congestionByTag(tag).bg;
 
+// statusLabelFromTag: 한국어 라벨은 유지, 색상은 congestionByTag로 매핑.
+// "약간 붐빔"이 "붐빔"으로 잘못 매칭되지 않도록 "약간"을 먼저 체크.
 const statusLabelFromTag = (tag: string) => {
-  if (tag.includes("약간")) return { label: "약간 붐빔", color: "#ff9800", bg: "#fff3e0" };
-  if (tag.includes("붐빔")) return { label: "혼잡", color: "#f44336", bg: "#fdecea" };
-  if (tag.includes("보통")) return { label: "보통", color: "#ffc107", bg: "#fffde7" };
-  if (tag.includes("여유")) return { label: "여유", color: "#4caf50", bg: "#e8f5e9" };
-  return { label: "확인 중", color: "#90aac0", bg: "#eef4f8" };
+  const t = congestionByTag(tag);
+  if (tag.includes("약간")) return { label: "약간 붐빔", color: t.text, bg: t.bgSoft };
+  if (tag.includes("붐빔")) return { label: "혼잡",      color: t.text, bg: t.bgSoft };
+  if (tag.includes("보통")) return { label: "보통",      color: t.text, bg: t.bgSoft };
+  if (tag.includes("여유")) return { label: "여유",      color: t.text, bg: t.bgSoft };
+  return { label: "확인 중", color: t.text, bg: t.bgSoft };
 };
 
 export default function MapApp() {
   const mapRef = useRef<HTMLDivElement>(null);
   const naverMapInstance = useRef<unknown>(null);
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [apiReady, setApiReady] = useState(false);
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -237,13 +236,13 @@ export default function MapApp() {
       const wrap = document.createElement("div");
       wrap.style.cssText = "position:relative;cursor:pointer;";
 
-      const color = congestionColor(place.tag);
+      const color = congestionDotColor(place.tag);
       const dot = document.createElement("div");
       dot.style.cssText = `width:12px;height:12px;background:${color};border-radius:50%;box-shadow:0 2px 8px ${color}80;`;
 
       const label = document.createElement("div");
       label.textContent = place.name;
-      label.style.cssText = `position:absolute;bottom:18px;left:50%;transform:translateX(-50%) translateY(4px);background:rgba(255,255,255,0.95);backdrop-filter:blur(8px);border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.15);pointer-events:none;opacity:0;transition:opacity 0.15s,transform 0.15s;color:#1a2a3a;border:1px solid ${color}30;font-family:'Noto Sans KR',sans-serif;`;
+      label.style.cssText = `position:absolute;bottom:18px;left:50%;transform:translateX(-50%) translateY(4px);background:${colors.bg.overlay};backdrop-filter:blur(8px);border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:${shadow.sm};pointer-events:none;opacity:0;transition:opacity 0.15s,transform 0.15s;color:${colors.text.primary};border:1px solid ${color}30;font-family:${typography.fontFamily};`;
 
       wrap.appendChild(dot);
       wrap.appendChild(label);
@@ -271,85 +270,86 @@ export default function MapApp() {
   }, [placesFromApi]);
 
   return (
-    <div style={styles.body}>
-      <div style={styles.phone}>
-        {/* ── Map Area ── */}
-        <div style={styles.mapContainer}>
-          <div ref={mapRef} style={styles.map} />
-          
-          {!apiReady && (
-            <div style={styles.fallback}>
-              <div style={styles.apiNotice}>지도를 불러오는 중...</div>
-            </div>
-          )}
+    <AppLayout>
+      {/* ── Map Area ── */}
+      <div style={styles.mapContainer}>
+        <div ref={mapRef} style={styles.map} />
 
-          <div style={styles.searchBar}>
-            <div style={styles.searchWrap}>
-              <SearchIcon />
-              <input
-                style={styles.searchInput}
-                placeholder="장소 검색"
-                value={searchValue}
-                onChange={(e) => {
-                  setSearchValue(e.target.value);
-                  setShowSuggestions(true);
-                }}
-                onFocus={() => setShowSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && suggestions.length > 0) panToPlace(suggestions[0]);
-                  if (e.key === "Escape") { setSearchValue(""); setShowSuggestions(false); }
-                }}
-              />
-              {searchValue.length > 0 && (
-                <button
-                  style={styles.searchClearBtn}
-                  onMouseDown={(e) => { e.preventDefault(); setSearchValue(""); setShowSuggestions(false); }}
-                >✕</button>
-              )}
-            </div>
-            {showSuggestions && suggestions.length > 0 && (
-              <div style={styles.suggestionList}>
-                {suggestions.map((place) => (
+        {!apiReady && (
+          <div style={styles.fallback}>
+            <div style={styles.apiNotice}>지도를 불러오는 중...</div>
+          </div>
+        )}
+
+        <div style={styles.searchBar}>
+          <div style={styles.searchWrap}>
+            <SearchIcon />
+            <input
+              style={styles.searchInput}
+              placeholder="장소 검색"
+              value={searchValue}
+              onChange={(e) => {
+                setSearchValue(e.target.value);
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && suggestions.length > 0) panToPlace(suggestions[0]);
+                if (e.key === "Escape") { setSearchValue(""); setShowSuggestions(false); }
+              }}
+            />
+            {searchValue.length > 0 && (
+              <button
+                style={styles.searchClearBtn}
+                onMouseDown={(e) => { e.preventDefault(); setSearchValue(""); setShowSuggestions(false); }}
+              >✕</button>
+            )}
+          </div>
+          {showSuggestions && suggestions.length > 0 && (
+            <div style={styles.suggestionList}>
+              {suggestions.map((place) => {
+                const t = congestionByTag(place.tag);
+                return (
                   <div
                     key={place.name}
                     style={styles.suggestionItem}
                     onMouseDown={() => panToPlace(place)}
                   >
                     <span style={styles.suggestionName}>{place.name}</span>
-                    <span style={{ ...styles.suggestionChip, color: congestionColor(place.tag), background: congestionColor(place.tag) + "18" }}>
+                    <span style={{ ...styles.suggestionChip, color: t.text, background: t.bgSoft }}>
                       {place.tag}
                     </span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div style={styles.timeBadge}>
-            <span style={styles.timeDot} />
-            <span>
-              🌙{" "}
-              {lastUpdatedAt
-                ? lastUpdatedAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })
-                : "--:--"}{" "}
-              🌙
-            </span>
-          </div>
-          <button
-            style={styles.logoutBtn}
-            onClick={() => {
-              sessionStorage.removeItem("accessToken");
-              navigate("/login", { replace: true });
-            }}
-            title="로그아웃"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7a90a4" strokeWidth="2.2" strokeLinecap="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-          </button>
+                );
+              })}
+            </div>
+          )}
         </div>
+        <div style={styles.timeBadge}>
+          <span style={styles.timeDot} />
+          <span>
+            🌙{" "}
+            {lastUpdatedAt
+              ? lastUpdatedAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })
+              : "--:--"}{" "}
+            🌙
+          </span>
+        </div>
+        <button
+          style={styles.logoutBtn}
+          onClick={() => {
+            sessionStorage.removeItem("accessToken");
+            navigate("/login", { replace: true });
+          }}
+          title="로그아웃"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={colors.text.secondary} strokeWidth="2.2" strokeLinecap="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </button>
 
         {/* ── Bottom Sheet ── */}
         {selectedPlace && (
@@ -431,81 +431,259 @@ export default function MapApp() {
             </button>
           </div>
         )}
-
-        {/* ── Bottom Nav ── */}
-        <div style={styles.bottomNav}>
-          <button style={styles.navItem} onClick={() => navigate("/")}>
-            <MapIcon active={location.pathname === "/"} />
-            <span style={{ fontSize: 10, color: location.pathname === "/" ? "#2196f3" : "#b0c4d4" }}>지도</span>
-          </button>
-          <button style={styles.navItem} onClick={() => navigate("/ranking")}>
-            <RankIcon active={location.pathname === "/ranking"} />
-            <span style={{ fontSize: 10, color: location.pathname === "/ranking" ? "#2196f3" : "#b0c4d4" }}>랭킹</span>
-          </button>
-          <button style={styles.navItem} onClick={() => navigate("/search")}>
-            <SearchNavIcon active={location.pathname === "/search"} />
-            <span style={{ fontSize: 10, color: location.pathname === "/search" ? "#2196f3" : "#b0c4d4" }}>검색</span>
-          </button>
-          <button style={styles.navItem} onClick={() => navigate("/favorites")}>
-            <BookmarkIcon active={location.pathname === "/favorites"} />
-            <span style={{ fontSize: 10, color: location.pathname === "/favorites" ? "#2196f3" : "#b0c4d4" }}>즐겨찾기</span>
-          </button>
-        </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
-const SearchIcon = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b0c4d4" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>);
-const SearchNavIcon = ({ active }: { active: boolean }) => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#2196f3" : "#b0c4d4"} strokeWidth="2">
+// 검색 바 안의 돋보기. nav 아이콘은 BottomNav 컴포넌트로 이동됨.
+const SearchIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={colors.text.tertiary} strokeWidth="2">
     <circle cx="11" cy="11" r="8" />
     <path d="m21 21-4.35-4.35" />
   </svg>
 );
-const MapIcon = ({ active }: { active: boolean }) => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#2196f3" : "#b0c4d4"} strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>);
-const RankIcon = ({ active }: { active: boolean }) => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#2196f3" : "#b0c4d4"} strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>);
-const BookmarkIcon = ({ active }: { active: boolean }) => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#2196f3" : "#b0c4d4"} strokeWidth="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg>);
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
-  body: { fontFamily: "'Noto Sans KR', sans-serif", background: "#e8f3fb", display: "flex", justifyContent: "center", minHeight: "100vh", paddingTop: 16 },
-  phone: { width: 375, height: 812, background: "#fff", borderRadius: 44, boxShadow: "0 40px 80px rgba(0,80,180,0.18)", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" },
-  mapContainer: { flex: 1, position: "relative", minHeight: 460 },
+  mapContainer: { flex: 1, position: "relative" },
   map: { position: "absolute", inset: 0 },
-  fallback: { position: "absolute", inset: 0, background: "#f0f8ff", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5 },
-  apiNotice: { padding: "12px 18px", fontSize: 12, color: "#7a90a4", background: "rgba(255,255,255,0.8)", borderRadius: 14 },
-  searchBar: { position: "absolute", top: 20, left: 20, right: 20, zIndex: 10 },
-  searchWrap: { background: "rgba(255,255,255,0.9)", borderRadius: 16, padding: "12px 18px", display: "flex", alignItems: "center", gap: 10, backdropFilter: "blur(10px)" },
-  searchInput: { border: "none", background: "transparent", outline: "none", width: "100%" },
-  searchClearBtn: { border: "none", background: "none", cursor: "pointer", color: "#b0c4d4", fontSize: 14, padding: "0 2px", lineHeight: 1 },
-  suggestionList: { marginTop: 6, background: "rgba(255,255,255,0.97)", borderRadius: 14, backdropFilter: "blur(16px)", boxShadow: "0 8px 32px rgba(33,150,243,0.13)", overflow: "hidden" },
-  suggestionItem: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 16px", cursor: "pointer", borderBottom: "1px solid rgba(33,150,243,0.06)", gap: 10 },
-  suggestionName: { fontSize: 13, fontWeight: 700, color: "#1a2a3a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  suggestionChip: { fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "3px 8px", flexShrink: 0 },
-  timeBadge: { position: "absolute", top: 74, right: 20, zIndex: 10, background: "rgba(255,255,255,0.9)", borderRadius: 20, padding: "6px 14px", display: "flex", alignItems: "center", gap: 6, fontSize: 13 },
-  logoutBtn: { position: "absolute", top: 74, left: 20, zIndex: 10, background: "rgba(255,255,255,0.9)", border: "none", borderRadius: 20, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6, cursor: "pointer", backdropFilter: "blur(10px)", fontSize: 12, color: "#7a90a4", fontWeight: 600 },
-  timeDot: { width: 7, height: 7, borderRadius: "50%", background: "#2196f3" },
-  bottomSheet: { position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 20, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(20px)", borderRadius: "24px 24px 0 0", padding: "12px 20px 30px", boxShadow: "0 -8px 40px rgba(0,0,0,0.1)", transition: "transform 0.35s ease-out" },
-  sheetHandle: { width: 40, height: 4, background: "#d0dfe8", borderRadius: 2, margin: "0 auto 16px" },
-  placeHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 },
-  placeTitleRow: { display: "flex", alignItems: "center", gap: 8, minWidth: 0 },
-  placeName: { fontSize: 20, fontWeight: 700 },
-  placeSub: { marginTop: 4, fontSize: 12, color: "#90aac0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  closeBtn: { border: "none", background: "#f0f4f8", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", color: "#7a90a4" },
+  fallback: {
+    position: "absolute",
+    inset: 0,
+    background: colors.bg.subtle,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 5,
+  },
+  apiNotice: {
+    padding: `${spacing.md}px ${spacing.lg + 2}px`,
+    fontSize: typography.size.sm,
+    color: colors.text.secondary,
+    background: colors.bg.overlay,
+    borderRadius: radius.lg,
+  },
+  searchBar: { position: "absolute", top: spacing.xl - 4, left: spacing.xl - 4, right: spacing.xl - 4, zIndex: 10 },
+  searchWrap: {
+    background: colors.bg.overlay,
+    borderRadius: radius.lg + 2,
+    padding: `${spacing.md}px ${spacing.lg + 2}px`,
+    display: "flex",
+    alignItems: "center",
+    gap: spacing.sm + 2,
+    backdropFilter: "blur(10px)",
+    boxShadow: shadow.md,
+  },
+  searchInput: {
+    border: "none",
+    background: "transparent",
+    outline: "none",
+    width: "100%",
+    fontFamily: "inherit",
+    fontSize: typography.size.base,
+    color: colors.text.primary,
+  },
+  searchClearBtn: {
+    border: "none",
+    background: "none",
+    cursor: "pointer",
+    color: colors.text.tertiary,
+    fontSize: 14,
+    padding: "0 2px",
+    lineHeight: 1,
+  },
+  suggestionList: {
+    marginTop: spacing.xs + 2,
+    background: colors.bg.overlay,
+    borderRadius: radius.lg,
+    backdropFilter: "blur(16px)",
+    boxShadow: shadow.lg,
+    overflow: "hidden",
+  },
+  suggestionItem: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: `${spacing.sm + 3}px ${spacing.lg}px`,
+    cursor: "pointer",
+    borderBottom: `1px solid ${colors.border.light}`,
+    gap: spacing.sm + 2,
+  },
+  suggestionName: {
+    fontSize: typography.size.base - 1,
+    fontWeight: typography.weight.bold,
+    color: colors.text.primary,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  suggestionChip: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    borderRadius: radius.full,
+    padding: `3px ${spacing.sm}px`,
+    flexShrink: 0,
+  },
+  timeBadge: {
+    position: "absolute",
+    top: 74,
+    right: spacing.xl - 4,
+    zIndex: 10,
+    background: colors.bg.overlay,
+    borderRadius: radius.xl,
+    padding: `${spacing.xs + 2}px ${spacing.md + 2}px`,
+    display: "flex",
+    alignItems: "center",
+    gap: spacing.xs + 2,
+    fontSize: typography.size.base - 1,
+    color: colors.text.primary,
+    boxShadow: shadow.sm,
+  },
+  logoutBtn: {
+    position: "absolute",
+    top: 74,
+    left: spacing.xl - 4,
+    zIndex: 10,
+    background: colors.bg.overlay,
+    border: "none",
+    borderRadius: radius.xl,
+    padding: `${spacing.xs + 2}px ${spacing.md}px`,
+    display: "flex",
+    alignItems: "center",
+    gap: spacing.xs + 2,
+    cursor: "pointer",
+    backdropFilter: "blur(10px)",
+    fontSize: typography.size.sm,
+    color: colors.text.secondary,
+    fontWeight: typography.weight.semibold,
+    boxShadow: shadow.sm,
+  },
+  timeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: radius.full,
+    background: colors.brand.accent,
+  },
+  bottomSheet: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    background: colors.bg.base,
+    backdropFilter: "blur(20px)",
+    borderRadius: `${radius.xl + 4}px ${radius.xl + 4}px 0 0`,
+    padding: `${spacing.md}px ${spacing.xl - 4}px ${spacing.xl + 6}px`,
+    boxShadow: shadow.lg,
+    transition: "transform 0.35s ease-out",
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    background: colors.border.medium,
+    borderRadius: 2,
+    margin: `0 auto ${spacing.lg}px`,
+  },
+  placeHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: spacing.md,
+    marginBottom: spacing.sm + 2,
+  },
+  placeTitleRow: { display: "flex", alignItems: "center", gap: spacing.sm, minWidth: 0 },
+  placeName: {
+    fontSize: typography.size.lg + 2,
+    fontWeight: typography.weight.bold,
+    color: colors.text.primary,
+  },
+  placeSub: {
+    marginTop: spacing.xs,
+    fontSize: typography.size.sm,
+    color: colors.text.tertiary,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  closeBtn: {
+    border: "none",
+    background: colors.bg.muted,
+    borderRadius: radius.full,
+    width: 28,
+    height: 28,
+    cursor: "pointer",
+    color: colors.text.secondary,
+  },
   bookmarkBtn: { border: "none", background: "transparent", cursor: "pointer", padding: 2 },
-  noticeBar: { display: "flex", gap: 10, alignItems: "flex-start", background: "#f3f8ff", borderRadius: 14, padding: "10px 12px", marginBottom: 12 },
-  noticeIcon: { width: 18, height: 18, borderRadius: "50%", background: "#e0efff", color: "#2196f3", fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 },
-  noticeText: { fontSize: 12, color: "#5a7a90", lineHeight: 1.35 },
-  pillsRow: { display: "flex", gap: 8, alignItems: "center", marginBottom: 12 },
-  pill: { display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, padding: "6px 12px", fontSize: 12, fontWeight: 700 },
-  pillDot: { width: 8, height: 8, borderRadius: "50%" },
-  statsRow: { display: "flex", gap: 12, marginBottom: 12 },
-  statCard: { flex: 1, background: "#ffffff", borderRadius: 14, padding: "14px 14px", boxShadow: "0 6px 20px rgba(33,150,243,0.10)" },
-  statLabel: { fontSize: 11, color: "#7a90a4", marginBottom: 6 },
-  statValue: { fontSize: 22, fontWeight: 700 },
-  reportBtn: { width: "100%", border: "none", borderRadius: 14, padding: "12px 14px", cursor: "pointer", fontWeight: 700, background: "linear-gradient(135deg, #8ad3f7, #79c6f0)", color: "#1a2a3a" },
-  bottomNav: { background: "#fff", display: "flex", justifyContent: "space-around", padding: "10px 0 18px", borderTop: "1px solid #eee" },
-  navItem: { border: "none", background: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer" }
+  noticeBar: {
+    display: "flex",
+    gap: spacing.sm + 2,
+    alignItems: "flex-start",
+    background: colors.bg.subtle,
+    borderRadius: radius.lg,
+    padding: `${spacing.sm + 2}px ${spacing.md}px`,
+    marginBottom: spacing.md,
+  },
+  noticeIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: radius.full,
+    background: colors.bg.muted,
+    color: colors.brand.accent,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  noticeText: {
+    fontSize: typography.size.sm,
+    color: colors.text.secondary,
+    lineHeight: 1.35,
+  },
+  pillsRow: { display: "flex", gap: spacing.sm, alignItems: "center", marginBottom: spacing.md },
+  pill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderRadius: radius.full,
+    padding: `${spacing.xs + 2}px ${spacing.md}px`,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+  },
+  pillDot: { width: 8, height: 8, borderRadius: radius.full },
+  statsRow: { display: "flex", gap: spacing.md, marginBottom: spacing.md },
+  statCard: {
+    flex: 1,
+    background: colors.bg.base,
+    border: `1px solid ${colors.border.light}`,
+    borderRadius: radius.lg,
+    padding: `${spacing.md + 2}px`,
+    boxShadow: shadow.sm,
+  },
+  statLabel: {
+    fontSize: typography.size.xs,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs + 2,
+  },
+  statValue: {
+    fontSize: typography.size.xl,
+    fontWeight: typography.weight.bold,
+    color: colors.text.primary,
+  },
+  reportBtn: {
+    width: "100%",
+    border: "none",
+    borderRadius: radius.lg,
+    padding: `${spacing.md}px ${spacing.md + 2}px`,
+    cursor: "pointer",
+    fontWeight: typography.weight.bold,
+    background: colors.brand.accent,
+    color: colors.text.inverse,
+    fontFamily: "inherit",
+  },
 };

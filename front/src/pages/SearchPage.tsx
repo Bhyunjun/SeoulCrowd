@@ -1,7 +1,9 @@
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { fetchPopulation } from "../utils/populationCache";
+import { AppLayout } from "../components/AppLayout";
+import { colors, typography, spacing, radius, shadow, congestionByTag } from "../styles/theme";
 
 type ApiPopulation = {
   areaName: string;
@@ -44,7 +46,6 @@ const addRecentSearch = (name: string) => {
 
 export default function SearchPage() {
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -102,103 +103,69 @@ export default function SearchPage() {
   const showRecent = query.trim() === "";
 
   return (
-    <div style={s.bg}>
-      <div style={s.phone}>
-        <div style={s.topBar}>
-          <div style={s.titleWrap}>
-            <div style={s.title}>장소 검색</div>
-            <div style={s.subtitle}>이름을 입력하면 상세 리포트로 이동할 수 있어요.</div>
-          </div>
-        </div>
-
-        <div style={s.searchWrap}>
-          <input
-            style={s.searchInput}
-            placeholder="예: 양재역, 뚝섬역"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <button type="button" style={s.clearBtn} onClick={() => setQuery("")}>
-            지우기
-          </button>
-        </div>
-
-        <div style={s.content}>
-          {loading && <div style={s.stateText}>검색 데이터를 불러오는 중...</div>}
-
-          {!loading && error && <div style={s.stateText}>{error}</div>}
-
-          {!loading && !error && showRecent && (
-            <>
-              {recentPlaces.length === 0 ? (
-                <div style={s.stateText}>최근 검색한 장소가 없습니다.</div>
-              ) : (
-                <>
-                  <div style={s.sectionHeader}>
-                    <span style={s.sectionTitle}>최근 검색</span>
-                    <button type="button" style={s.clearRecentBtn} onClick={clearRecent}>
-                      전체 삭제
-                    </button>
-                  </div>
-                  {recentPlaces.map((p) => (
-                    <PlaceRow key={p.areaName} place={p} onClick={() => handlePlaceClick(p)} />
-                  ))}
-                </>
-              )}
-            </>
-          )}
-
-          {!loading && !error && !showRecent && (
-            <>
-              {filtered.length === 0 ? (
-                <div style={s.stateText}>검색 결과가 없습니다.</div>
-              ) : (
-                filtered.map((p) => (
-                  <PlaceRow key={p.areaName} place={p} onClick={() => handlePlaceClick(p)} />
-                ))
-              )}
-            </>
-          )}
-        </div>
-
-        <div style={s.bottomNav}>
-          <button style={s.navItem} onClick={() => navigate("/")}>
-            <div style={{ ...s.navIconWrap, background: location.pathname === "/" ? "#2196f3" : "transparent" }}>
-              <MapNavIcon active={location.pathname === "/"} />
-            </div>
-            <span style={{ ...s.navLabel, color: location.pathname === "/" ? "#2196f3" : "#a0b8c8" }}>지도</span>
-          </button>
-          <button style={s.navItem} onClick={() => navigate("/ranking")}>
-            <div style={{ ...s.navIconWrap, background: location.pathname === "/ranking" ? "#2196f3" : "transparent" }}>
-              <RankNavIcon active={location.pathname === "/ranking"} />
-            </div>
-            <span style={{ ...s.navLabel, color: location.pathname === "/ranking" ? "#2196f3" : "#a0b8c8" }}>
-              랭킹
-            </span>
-          </button>
-          <button style={s.navItem} onClick={() => navigate("/favorites")}>
-            <div style={{ ...s.navIconWrap, background: location.pathname === "/favorites" ? "#2196f3" : "transparent" }}>
-              <BookmarkNavIcon active={location.pathname === "/favorites"} />
-            </div>
-            <span style={{ ...s.navLabel, color: location.pathname === "/favorites" ? "#2196f3" : "#a0b8c8" }}>
-              즐겨찾기
-            </span>
-          </button>
-          <button style={s.navItem} onClick={() => navigate("/search")}>
-            <div style={{ ...s.navIconWrap, background: location.pathname === "/search" ? "#2196f3" : "transparent" }}>
-              <SearchNavIcon active={location.pathname === "/search"} />
-            </div>
-            <span style={{ ...s.navLabel, color: location.pathname === "/search" ? "#2196f3" : "#a0b8c8" }}>
-              검색
-            </span>
-          </button>
+    <AppLayout>
+      <div style={s.topBar}>
+        <div style={s.titleWrap}>
+          <div style={s.title}>장소 검색</div>
+          <div style={s.subtitle}>이름을 입력하면 상세 리포트로 이동할 수 있어요.</div>
         </div>
       </div>
-    </div>
+
+      <div style={s.searchWrap}>
+        <input
+          style={s.searchInput}
+          placeholder="예: 양재역, 뚝섬역"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <button type="button" style={s.clearBtn} onClick={() => setQuery("")}>
+          지우기
+        </button>
+      </div>
+
+      <div style={s.content}>
+        {loading && <div style={s.stateText}>검색 데이터를 불러오는 중...</div>}
+
+        {!loading && error && <div style={s.stateText}>{error}</div>}
+
+        {!loading && !error && showRecent && (
+          <>
+            {recentPlaces.length === 0 ? (
+              <div style={s.stateText}>최근 검색한 장소가 없습니다.</div>
+            ) : (
+              <>
+                <div style={s.sectionHeader}>
+                  <span style={s.sectionTitle}>최근 검색</span>
+                  <button type="button" style={s.clearRecentBtn} onClick={clearRecent}>
+                    전체 삭제
+                  </button>
+                </div>
+                {recentPlaces.map((p) => (
+                  <PlaceRow key={p.areaName} place={p} onClick={() => handlePlaceClick(p)} />
+                ))}
+              </>
+            )}
+          </>
+        )}
+
+        {!loading && !error && !showRecent && (
+          <>
+            {filtered.length === 0 ? (
+              <div style={s.stateText}>검색 결과가 없습니다.</div>
+            ) : (
+              filtered.map((p) => (
+                <PlaceRow key={p.areaName} place={p} onClick={() => handlePlaceClick(p)} />
+              ))
+            )}
+          </>
+        )}
+      </div>
+    </AppLayout>
   );
 }
 
 function PlaceRow({ place, onClick }: { place: ApiPopulation; onClick: () => void }) {
+  const tagToken = congestionByTag(place.congestionLevel);
   return (
     <div
       style={s.resultItem}
@@ -209,148 +176,115 @@ function PlaceRow({ place, onClick }: { place: ApiPopulation; onClick: () => voi
     >
       <div style={s.resultName}>{place.areaName}</div>
       <div style={s.resultMeta}>
-        <span style={s.resultChip}>{place.congestionLevel}</span>
+        <span style={{ ...s.resultChip, color: tagToken.text, background: tagToken.bgSoft }}>
+          {place.congestionLevel}
+        </span>
         <span style={s.resultPop}>{formatPop(place.populationMax)}</span>
       </div>
     </div>
   );
 }
 
-const MapNavIcon = ({ active }: { active: boolean }) => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? "white" : "#a0b8c8"} strokeWidth="2">
-    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-    <polyline points="9 22 9 12 15 12 15 22" />
-  </svg>
-);
-const RankNavIcon = ({ active }: { active: boolean }) => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? "white" : "#a0b8c8"} strokeWidth="2">
-    <line x1="18" y1="20" x2="18" y2="10" />
-    <line x1="12" y1="20" x2="12" y2="4" />
-    <line x1="6" y1="20" x2="6" y2="14" />
-  </svg>
-);
-const SearchNavIcon = ({ active }: { active: boolean }) => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? "white" : "#a0b8c8"} strokeWidth="2">
-    <circle cx="11" cy="11" r="8" />
-    <path d="m21 21-4.35-4.35" />
-  </svg>
-);
-const BookmarkNavIcon = ({ active }: { active: boolean }) => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? "white" : "#a0b8c8"} strokeWidth="2">
-    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-  </svg>
-);
-
 const s: Record<string, React.CSSProperties> = {
-  bg: {
-    minHeight: "100vh",
-    background: "linear-gradient(160deg, #d6edfb 0%, #e4f3fc 60%, #edf8ff 100%)",
-    fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif",
-    display: "flex",
-    justifyContent: "center",
+  topBar: { padding: `${spacing.lg + 2}px ${spacing.xl - 2}px ${spacing.sm}px` },
+  titleWrap: { display: "flex", flexDirection: "column", gap: spacing.xs + 2 },
+  title: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.bold,
+    color: colors.text.primary,
   },
-  phone: {
-    width: 375,
-    minHeight: 812,
-    background: "rgba(255,255,255,0.92)",
-    backdropFilter: "blur(20px)",
-    borderRadius: 44,
-    overflow: "hidden",
-    boxShadow: "0 40px 80px rgba(0,80,180,0.10)",
-    display: "flex",
-    flexDirection: "column",
+  subtitle: {
+    fontSize: typography.size.sm,
+    color: colors.text.tertiary,
   },
-  topBar: { padding: "18px 22px 8px" },
-  titleWrap: { display: "flex", flexDirection: "column", gap: 6 },
-  title: { fontSize: 18, fontWeight: 900, color: "#1a2a3a" },
-  subtitle: { fontSize: 12, color: "#90aac0" },
   searchWrap: {
-    padding: "0 22px",
+    padding: `0 ${spacing.xl - 2}px`,
     display: "flex",
-    gap: 10,
+    gap: spacing.sm + 2,
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: spacing.sm + 2,
   },
   searchInput: {
     flex: 1,
-    border: "none",
-    borderRadius: 14,
-    background: "rgba(255,255,255,0.95)",
-    padding: "12px 14px",
+    border: `1px solid ${colors.border.light}`,
+    borderRadius: radius.lg,
+    background: colors.bg.base,
+    padding: `${spacing.md}px ${spacing.md + 2}px`,
     outline: "none",
     fontFamily: "inherit",
-    boxShadow: "0 2px 10px rgba(33,150,243,0.06)",
+    fontSize: typography.size.base,
+    color: colors.text.primary,
+    boxShadow: shadow.sm,
   },
   clearBtn: {
-    border: "none",
-    borderRadius: 14,
-    padding: "10px 12px",
+    border: `1px solid ${colors.border.light}`,
+    borderRadius: radius.lg,
+    padding: `${spacing.sm + 2}px ${spacing.md}px`,
     cursor: "pointer",
-    background: "rgba(255,255,255,0.8)",
-    color: "#5a80a0",
-    fontWeight: 800,
+    background: colors.bg.base,
+    color: colors.text.secondary,
+    fontWeight: typography.weight.semibold,
+    fontFamily: "inherit",
   },
-  content: { flex: 1, padding: "0 14px 14px", overflowY: "auto" },
-  stateText: { textAlign: "center", color: "#7a90a4", padding: "18px 0" },
+  content: { flex: 1, padding: `0 ${spacing.md + 2}px ${spacing.md + 2}px` },
+  stateText: {
+    textAlign: "center",
+    color: colors.text.secondary,
+    padding: `${spacing.lg + 2}px 0`,
+    fontSize: typography.size.sm,
+  },
   sectionHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "8px 2px 10px",
+    padding: `${spacing.sm}px 2px ${spacing.sm + 2}px`,
   },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: 900,
-    color: "#1a2a3a",
+    fontSize: typography.size.base - 1,
+    fontWeight: typography.weight.bold,
+    color: colors.text.primary,
   },
   clearRecentBtn: {
     border: "none",
     background: "none",
-    color: "#90aac0",
-    fontSize: 12,
+    color: colors.text.tertiary,
+    fontSize: typography.size.sm,
     cursor: "pointer",
     fontFamily: "inherit",
     padding: 0,
   },
   resultItem: {
-    background: "rgba(255,255,255,0.9)",
-    borderRadius: 18,
-    padding: "14px 14px",
-    marginBottom: 10,
+    background: colors.bg.base,
+    borderRadius: radius.lg + 4,
+    padding: `${spacing.md + 2}px ${spacing.md + 2}px`,
+    marginBottom: spacing.sm + 2,
     cursor: "pointer",
-    boxShadow: "0 6px 20px rgba(33,150,243,0.07)",
-    border: "1px solid rgba(33,150,243,0.08)",
+    boxShadow: shadow.sm,
+    border: `1px solid ${colors.border.light}`,
   },
-  resultName: { fontWeight: 900, color: "#1a2a3a", marginBottom: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  resultMeta: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 },
-  resultChip: { fontSize: 11, fontWeight: 800, color: "#2196f3", background: "#eaf6ff", padding: "6px 10px", borderRadius: 999 },
-  resultPop: { fontSize: 14, fontWeight: 900, color: "#1a2a3a" },
-  bottomNav: {
-    background: "rgba(255,255,255,0.92)",
-    backdropFilter: "blur(20px)",
-    borderTop: "1px solid rgba(200,220,240,0.3)",
-    display: "flex",
-    justifyContent: "space-around",
-    padding: "12px 0 20px",
-    flexShrink: 0,
+  resultName: {
+    fontWeight: typography.weight.bold,
+    color: colors.text.primary,
+    marginBottom: spacing.xs + 2,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
-  navItem: {
-    border: "none",
-    background: "none",
+  resultMeta: {
     display: "flex",
-    flexDirection: "column",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 4,
-    cursor: "pointer",
+    gap: spacing.sm + 2,
   },
-  navIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: "50%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    transition: "background 0.2s",
+  resultChip: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    padding: `${spacing.xs + 2}px ${spacing.sm + 2}px`,
+    borderRadius: radius.full,
   },
-  navLabel: { fontSize: 10, fontWeight: 500 },
+  resultPop: {
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.bold,
+    color: colors.text.primary,
+  },
 };

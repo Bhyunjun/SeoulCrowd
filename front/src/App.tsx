@@ -6,8 +6,10 @@ import FavoritesPage from "./pages/FavoritesPage";
 import MapApp from "./pages/MapApp";
 import PlaceReportPage from "./pages/PlaceReportPage";
 import SearchPage from "./pages/SearchPage";
+import { DesignReviewBanner, isDesignReviewMode } from "./utils/designReviewMock";
 
 function RequireAuth({ children }: { children: ReactElement }) {
+  if (isDesignReviewMode()) return children;
   const token = sessionStorage.getItem("accessToken");
   if (!token) return <Navigate to="/login" replace />;
   return children;
@@ -16,6 +18,7 @@ function RequireAuth({ children }: { children: ReactElement }) {
 function App() {
   return (
     <BrowserRouter>
+      <DesignReviewBanner />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<RequireAuth><MapApp /></RequireAuth>} />
