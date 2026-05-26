@@ -1,7 +1,7 @@
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";  // PlaceCard 내부에서 사용
-import { Star, User } from "lucide-react";
+import { Star } from "lucide-react";
 import { fetchPopulation } from "../utils/populationCache";
 import { apiFetch, getAccessToken } from "../api/client";
 import { AppLayout } from "../components/AppLayout";
@@ -130,11 +130,6 @@ export default function FavoritesPage() {
           </svg>
           <span style={s.logoText}>SEOUL Favorites</span>
         </div>
-        <div style={s.topActions}>
-          <button style={s.avatarBtn} aria-label="프로필">
-            <User size={18} color={colors.text.inverse} />
-          </button>
-        </div>
       </div>
 
       {/* Main */}
@@ -145,20 +140,23 @@ export default function FavoritesPage() {
             <p style={s.headerSub}>REAL-TIME DASHBOARD</p>
             <h1 style={s.headerTitle}>즐겨찾는 장소</h1>
           </div>
-          <button style={s.editBtn}>목록 편집</button>
         </div>
 
-        {/* Cards */}
-        <div style={s.cardsRow}>
-          {loading && <div style={{ ...s.notice, marginTop: 0 }}>즐겨찾기 불러오는 중...</div>}
-          {!loading && error && <div style={{ ...s.notice, marginTop: 0 }}>{error}</div>}
-          {!loading && !error && places.length === 0 && (
-            <div style={{ ...s.notice, marginTop: 0 }}>즐겨찾기한 장소가 없습니다.</div>
-          )}
-          {!loading && !error && places.map((place) => (
-            <PlaceCard key={place.name} place={place} onBookmark={() => removeFavorite(place.name)} />
-          ))}
-        </div>
+        {/* Loading / Error / Empty 상태는 grid 밖에서 풀폭으로 표시 */}
+        {loading && <div style={{ ...s.notice, marginTop: 0 }}>즐겨찾기 불러오는 중...</div>}
+        {!loading && error && <div style={{ ...s.notice, marginTop: 0 }}>{error}</div>}
+        {!loading && !error && places.length === 0 && (
+          <div style={{ ...s.notice, marginTop: 0 }}>즐겨찾기한 장소가 없습니다.</div>
+        )}
+
+        {/* Cards grid (실제 데이터 있을 때만) */}
+        {!loading && !error && places.length > 0 && (
+          <div style={s.cardsRow}>
+            {places.map((place) => (
+              <PlaceCard key={place.name} place={place} onBookmark={() => removeFavorite(place.name)} />
+            ))}
+          </div>
+        )}
 
         {/* Bottom notice */}
         <div style={s.notice}>
@@ -259,24 +257,6 @@ const s: Record<string, React.CSSProperties> = {
     color: colors.text.primary,
     letterSpacing: "0.03em",
   },
-  topActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: spacing.sm + 2,
-  },
-  avatarBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    background: colors.brand.accent,
-    border: "none",
-    color: colors.text.inverse,
-    cursor: "pointer",
-    boxShadow: shadow.md,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   main: {
     flex: 1,
     padding: `0 ${spacing.xl + 4}px ${spacing.xl - 4}px`,
@@ -301,33 +281,20 @@ const s: Record<string, React.CSSProperties> = {
     letterSpacing: "-0.8px",
     margin: 0,
   },
-  editBtn: {
-    background: colors.bg.base,
-    border: `1px solid ${colors.border.light}`,
-    borderRadius: radius.md + 2,
-    padding: `${spacing.sm}px ${spacing.lg}px`,
-    fontSize: typography.size.sm,
-    color: colors.text.secondary,
-    cursor: "pointer",
-    fontFamily: "inherit",
-    boxShadow: shadow.sm,
-  },
+  // 카드가 많아져도 줄바꿈되어 세로로 쌓이도록 grid 사용 (auto-fill로 너비 적응)
   cardsRow: {
-    display: "flex",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
     gap: spacing.lg,
-    overflowX: "auto",
     paddingBottom: spacing.sm,
-    scrollbarWidth: "none",
   },
   card: {
-    minWidth: 220,
     background: colors.bg.base,
     border: `1px solid ${colors.border.light}`,
     borderRadius: radius.xl + 2,
     padding: `${spacing.xl - 4}px ${spacing.lg + 2}px ${spacing.lg}px`,
     cursor: "pointer",
     transition: "transform 0.2s, box-shadow 0.2s",
-    flexShrink: 0,
   },
   cardTop: {
     display: "flex",
