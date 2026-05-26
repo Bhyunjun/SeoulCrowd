@@ -1,6 +1,7 @@
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";  // PlaceCard 내부에서 사용
+import { Star, User } from "lucide-react";
 import { fetchPopulation } from "../utils/populationCache";
 import { apiFetch, getAccessToken } from "../api/client";
 import { AppLayout } from "../components/AppLayout";
@@ -23,9 +24,6 @@ type PopulationItem = {
   populationMin?: number;
   populationMax?: number;
 };
-
-// Phase 2: theme 토큰에 별 색상 없어 일단 hex 유지
-const STAR_FILL = "#f5c518";
 
 const getErrorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
@@ -133,8 +131,9 @@ export default function FavoritesPage() {
           <span style={s.logoText}>SEOUL Favorites</span>
         </div>
         <div style={s.topActions}>
-          <button style={s.iconBtn} aria-label="테마 전환">🌙</button>
-          <button style={s.avatarBtn} aria-label="프로필">B</button>
+          <button style={s.avatarBtn} aria-label="프로필">
+            <User size={18} color={colors.text.inverse} />
+          </button>
         </div>
       </div>
 
@@ -163,7 +162,7 @@ export default function FavoritesPage() {
 
         {/* Bottom notice */}
         <div style={s.notice}>
-          <span style={{ color: colors.brand.accent, fontSize: 9 }}>●</span>
+          <span style={s.noticeDot} />
           서울의 인구 밀도를 데이터로 지금 바로 파악하고 있습니다
         </div>
       </div>
@@ -193,9 +192,8 @@ function PlaceCard({ place, onBookmark }: { place: Place; onBookmark: () => void
       role="button"
       tabIndex={0}
     >
-      {/* Card top */}
+      {/* Card top — 즐겨찾기 토글 버튼만 (장식 별은 제거됨) */}
       <div style={s.cardTop}>
-        <span style={s.cardIcon}>⭐</span>
         <button
           style={s.starBtn}
           onClick={(e) => {
@@ -204,12 +202,12 @@ function PlaceCard({ place, onBookmark }: { place: Place; onBookmark: () => void
           }}
           aria-label="즐겨찾기 해제"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24"
-            fill={place.bookmarked ? STAR_FILL : "none"}
-            stroke={place.bookmarked ? STAR_FILL : colors.border.medium}
-            strokeWidth="2">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-          </svg>
+          <Star
+            size={18}
+            fill={place.bookmarked ? colors.icon.star : "none"}
+            color={place.bookmarked ? colors.icon.star : colors.border.medium}
+            strokeWidth={2}
+          />
         </button>
       </div>
 
@@ -266,18 +264,6 @@ const s: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: spacing.sm + 2,
   },
-  iconBtn: {
-    background: colors.bg.overlay,
-    border: "none",
-    borderRadius: radius.full,
-    width: 36,
-    height: 36,
-    cursor: "pointer",
-    fontSize: 16,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   avatarBtn: {
     width: 36,
     height: 36,
@@ -285,10 +271,11 @@ const s: Record<string, React.CSSProperties> = {
     background: colors.brand.accent,
     border: "none",
     color: colors.text.inverse,
-    fontWeight: typography.weight.bold,
-    fontSize: 15,
     cursor: "pointer",
     boxShadow: shadow.md,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
   main: {
     flex: 1,
@@ -345,11 +332,16 @@ const s: Record<string, React.CSSProperties> = {
   cardTop: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     marginBottom: spacing.md,
   },
-  cardIcon: {
-    fontSize: 22,
+  noticeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: radius.full,
+    background: colors.brand.accent,
+    display: "inline-block",
+    flexShrink: 0,
   },
   starBtn: {
     background: "none",

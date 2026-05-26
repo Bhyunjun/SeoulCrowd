@@ -104,9 +104,6 @@ export default function RankingPage() {
 
   return (
     <AppLayout>
-      {/* Moon toggle (Phase 2에서 lucide 교체 예정) */}
-      <button style={s.moonBtn} aria-label="테마 전환">🌙</button>
-
       <div style={s.content}>
         {/* Header */}
         <div style={s.header}>
@@ -114,7 +111,7 @@ export default function RankingPage() {
           <div style={s.timeRow}>
             <span style={s.timeDot} />
             <span style={s.timeText}>
-              🌙 {timeText ? `${timeText} 기준 업데이트됨` : "업데이트 시각 불러오는 중"}
+              {timeText ? `${timeText} 기준 업데이트됨` : "업데이트 시각 불러오는 중"}
             </span>
           </div>
         </div>
@@ -214,24 +211,6 @@ export default function RankingPage() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s: Record<string, React.CSSProperties> = {
-  moonBtn: {
-    position: "fixed",
-    bottom: spacing.xl,
-    right: spacing.xl,
-    background: colors.bg.overlay,
-    border: "none",
-    borderRadius: radius.full,
-    width: 42,
-    height: 42,
-    fontSize: 18,
-    cursor: "pointer",
-    boxShadow: shadow.md,
-    backdropFilter: "blur(8px)",
-    zIndex: 100,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   content: {
     flex: 1,
     padding: `${spacing["2xl"]}px ${spacing.lg}px ${spacing.lg}px`,

@@ -4,7 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { fetchPopulation } from "../utils/populationCache";
 import { getAccessToken, apiFetch } from "../api/client";
 import { AppLayout } from "../components/AppLayout";
+import { Star, X, ChevronRight, LogOut } from "lucide-react";
 import { colors, typography, spacing, radius, shadow, congestionByTag } from "../styles/theme";
+import { statusForMap } from "../utils/congestionStatus";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface PlaceInfo {
@@ -53,19 +55,8 @@ const estimateCrowdPercent = (populationMaxRaw?: number) => {
   return clamp(Math.round((populationMaxRaw / 50000) * 100), 1, 100);
 };
 
-// 마커 점 색상 (강한 채도) — congestionByTag의 bg 사용
+// 마커 점 색상 (강한 채도) — congestionByTag의 bg 사용 (마커는 작아서 강한 색 필요)
 const congestionDotColor = (tag: string) => congestionByTag(tag).bg;
-
-// statusLabelFromTag: 한국어 라벨은 유지, 색상은 congestionByTag로 매핑.
-// "약간 붐빔"이 "붐빔"으로 잘못 매칭되지 않도록 "약간"을 먼저 체크.
-const statusLabelFromTag = (tag: string) => {
-  const t = congestionByTag(tag);
-  if (tag.includes("약간")) return { label: "약간 붐빔", color: t.text, bg: t.bgSoft };
-  if (tag.includes("붐빔")) return { label: "혼잡",      color: t.text, bg: t.bgSoft };
-  if (tag.includes("보통")) return { label: "보통",      color: t.text, bg: t.bgSoft };
-  if (tag.includes("여유")) return { label: "여유",      color: t.text, bg: t.bgSoft };
-  return { label: "확인 중", color: t.text, bg: t.bgSoft };
-};
 
 export default function MapApp() {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -303,7 +294,10 @@ export default function MapApp() {
               <button
                 style={styles.searchClearBtn}
                 onMouseDown={(e) => { e.preventDefault(); setSearchValue(""); setShowSuggestions(false); }}
-              >✕</button>
+                aria-label="검색어 지우기"
+              >
+                <X size={14} />
+              </button>
             )}
           </div>
           {showSuggestions && suggestions.length > 0 && (
@@ -329,11 +323,9 @@ export default function MapApp() {
         <div style={styles.timeBadge}>
           <span style={styles.timeDot} />
           <span>
-            🌙{" "}
             {lastUpdatedAt
               ? lastUpdatedAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })
-              : "--:--"}{" "}
-            🌙
+              : "--:--"}
           </span>
         </div>
         <button
@@ -343,12 +335,9 @@ export default function MapApp() {
             navigate("/login", { replace: true });
           }}
           title="로그아웃"
+          aria-label="로그아웃"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={colors.text.secondary} strokeWidth="2.2" strokeLinecap="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
+          <LogOut size={16} color={colors.text.secondary} strokeWidth={2.2} />
         </button>
 
         {/* ── Bottom Sheet ── */}
@@ -356,7 +345,7 @@ export default function MapApp() {
           <div
             style={{
               ...styles.bottomSheet,
-              transform: sheetVisible ? "translateY(0)" : "translateY(110%)",
+              transform: sheetVisible ? "translate(-50%, 0)" : "translate(-50%, 110%)",
             }}
           >
             <div style={styles.sheetHandle} />
@@ -371,14 +360,21 @@ export default function MapApp() {
                     aria-label="즐겨찾기"
                     title="즐겨찾기"
                   >
-                    <span style={{ fontSize: 16, lineHeight: 1 }}>{isBookmarked ? "★" : "☆"}</span>
+                    <Star
+                      size={18}
+                      fill={isBookmarked ? colors.icon.star : "none"}
+                      color={isBookmarked ? colors.icon.star : colors.text.tertiary}
+                      strokeWidth={2}
+                    />
                   </button>
                 </div>
                 <div style={styles.placeSub}>
                   {selectedPlace.address ?? "주소 정보가 없습니다. (추후 연동 가능)"}
                 </div>
               </div>
-              <button style={styles.closeBtn} onClick={() => setSheetVisible(false)}>✕</button>
+              <button style={styles.closeBtn} onClick={() => setSheetVisible(false)} aria-label="닫기">
+                <X size={16} />
+              </button>
             </div>
 
             <div style={styles.noticeBar}>
@@ -390,7 +386,7 @@ export default function MapApp() {
 
             <div style={styles.pillsRow}>
               {(() => {
-                const st = statusLabelFromTag(selectedPlace.tag);
+                const st = statusForMap(selectedPlace.tag);
                 return (
                   <div style={{ ...styles.pill, background: st.bg, color: st.color }}>
                     <span style={{ ...styles.pillDot, background: st.color }} />
@@ -412,7 +408,7 @@ export default function MapApp() {
               <div style={styles.statCard}>
                 <div style={styles.statLabel}>혼잡 예상</div>
                 {(() => {
-                  const st = statusLabelFromTag(selectedPlace.tag);
+                  const st = statusForMap(selectedPlace.tag);
                   return <div style={styles.statValue}>{st.label}</div>;
                 })()}
               </div>
@@ -427,7 +423,8 @@ export default function MapApp() {
                 })
               }
             >
-              상세 리포트 보기 →
+              상세 리포트 보기
+              <ChevronRight size={16} />
             </button>
           </div>
         )}
@@ -465,7 +462,16 @@ const styles: Record<string, React.CSSProperties> = {
     background: colors.bg.overlay,
     borderRadius: radius.lg,
   },
-  searchBar: { position: "absolute", top: spacing.xl - 4, left: spacing.xl - 4, right: spacing.xl - 4, zIndex: 10 },
+  // 데스크톱에서 검색바가 너무 넓어지지 않도록 좌우 가운데 정렬 + maxWidth 제한
+  searchBar: {
+    position: "absolute",
+    top: spacing.xl - 4,
+    left: "50%",
+    transform: "translateX(-50%)",
+    width: `calc(100% - ${(spacing.xl - 4) * 2}px)`,
+    maxWidth: 480,
+    zIndex: 10,
+  },
   searchWrap: {
     background: colors.bg.overlay,
     borderRadius: radius.lg + 2,
@@ -493,6 +499,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     padding: "0 2px",
     lineHeight: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
   suggestionList: {
     marginTop: spacing.xs + 2,
@@ -569,8 +578,9 @@ const styles: Record<string, React.CSSProperties> = {
   bottomSheet: {
     position: "absolute",
     bottom: 0,
-    left: 0,
-    right: 0,
+    left: "50%",
+    width: "100%",
+    maxWidth: 480, // 데스크톱에서 시트가 1280px 전체로 늘어지지 않도록
     zIndex: 20,
     background: colors.bg.base,
     backdropFilter: "blur(20px)",
@@ -615,6 +625,9 @@ const styles: Record<string, React.CSSProperties> = {
     height: 28,
     cursor: "pointer",
     color: colors.text.secondary,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
   bookmarkBtn: { border: "none", background: "transparent", cursor: "pointer", padding: 2 },
   noticeBar: {
@@ -685,5 +698,10 @@ const styles: Record<string, React.CSSProperties> = {
     background: colors.brand.accent,
     color: colors.text.inverse,
     fontFamily: "inherit",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    fontSize: typography.size.base,
   },
 };
