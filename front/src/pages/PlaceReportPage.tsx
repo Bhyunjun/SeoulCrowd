@@ -9,6 +9,29 @@ import { ChevronLeft, Star } from "lucide-react";
 import { colors, typography, spacing, radius, shadow } from "../styles/theme";
 import { statusForReport } from "../utils/congestionStatus";
 
+// 머신러닝 예측 서비스(FastAPI) 주소. 기본 localhost:8000.
+// 배포 시 front/.env(.local) 에 VITE_ML_API_URL 지정.
+const ML_API_BASE =
+  (import.meta.env.VITE_ML_API_URL as string | undefined) ?? "http://localhost:8000";
+
+// 로컬 날짜 → "YYYY-MM-DD" (브라우저 타임존 기준)
+const toDateInput = (d: Date) => {
+  const tz = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return tz.toISOString().slice(0, 10);
+};
+
+type DailyPoint = {
+  hour: number;
+  label: string;
+  predictedMax: number;
+  predictedMin: number;
+  congestionLevel: string;
+  confidence: "high" | "medium" | "low";
+};
+
+const formatPopKo = (n: number) =>
+  n >= 10000 ? `${(n / 10000).toFixed(1)}만명` : `${Math.round(n).toLocaleString("ko-KR")}명`;
+
 type HistoryPoint = {
   updatedAt: string;       // "2026-04-20 08:30"
   populationMax: number;
@@ -132,6 +155,44 @@ export default function PlaceReportPage() {
   const [favoriteBusy, setFavoriteBusy] = useState(false);
 
   const [historyData, setHistoryData] = useState<HistoryPoint[]>([]);
+
+  // ── 상세 ML 예측 (날짜별 24시간 곡선) ──
+  const [showPrediction, setShowPrediction] = useState(false);
+  const [predDate, setPredDate] = useState<string>(() => toDateInput(new Date()));
+  const [predHour, setPredHour] = useState<number>(() => new Date().getHours());
+  const [dailyPoints, setDailyPoints] = useState<DailyPoint[]>([]);
+  const [predLoading, setPredLoading] = useState(false);
+  const [predError, setPredError] = useState<string | null>(null);
+  const [predMeta, setPredMeta] = useState<{ method?: string; dayOfWeek?: string } | null>(null);
+
+  useEffect(() => {
+    if (!showPrediction || !place?.name) return;
+    let cancelled = false;
+    setPredLoading(true);
+    setPredError(null);
+    fetch(`${ML_API_BASE}/api/forecast/${encodeURIComponent(place.name)}/daily?date=${predDate}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`예측 서버 응답 오류 (${r.status})`);
+        return r.json();
+      })
+      .then((json) => {
+        if (cancelled) return;
+        if (!json?.success || !Array.isArray(json?.points)) throw new Error("예측 데이터를 받지 못했습니다.");
+        setDailyPoints(json.points);
+        setPredMeta({ method: json.method, dayOfWeek: json.dayOfWeek });
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setDailyPoints([]);
+        setPredError(
+          e instanceof Error && e.message.includes("Failed to fetch")
+            ? "예측 서버에 연결할 수 없습니다. (ml-prediction 서버를 실행하세요: uvicorn server:app --port 8000)"
+            : e instanceof Error ? e.message : "예측을 불러오지 못했습니다.",
+        );
+      })
+      .finally(() => !cancelled && setPredLoading(false));
+    return () => { cancelled = true; };
+  }, [showPrediction, place?.name, predDate]);
 
   useEffect(() => {
   if (!place?.name) return;
@@ -363,13 +424,159 @@ export default function PlaceReportPage() {
                 <div style={s.aiBody}>
                   현재 혼잡 비율은 약 <b>{crowdPercent}%</b>로 추정됩니다. 저녁 시간대로 갈수록 사람이 늘어날 가능성이 있어요.
                 </div>
-                <button type="button" style={s.aiBtn}>상세 예측 보기</button>
+                <button
+                  type="button"
+                  style={s.aiBtn}
+                  onClick={() => setShowPrediction((v) => !v)}
+                >
+                  {showPrediction ? "예측 닫기" : "상세 예측 보기"}
+                </button>
               </div>
             </div>
           </div>
+
+          {showPrediction && (
+            <PredictionPanel
+              points={dailyPoints}
+              loading={predLoading}
+              error={predError}
+              date={predDate}
+              onDateChange={setPredDate}
+              hour={predHour}
+              onHourChange={setPredHour}
+              meta={predMeta}
+            />
+          )}
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+// ── 상세 ML 예측 패널: 날짜 입력 + 24시간 예측 곡선 + 선택 시각 예측 인구 ──
+function PredictionPanel({
+  points, loading, error, date, onDateChange, hour, onHourChange, meta,
+}: {
+  points: DailyPoint[];
+  loading: boolean;
+  error: string | null;
+  date: string;
+  onDateChange: (d: string) => void;
+  hour: number;
+  onHourChange: (h: number) => void;
+  meta: { method?: string; dayOfWeek?: string } | null;
+}) {
+  const peak = points.length
+    ? points.reduce((a, b) => (a.predictedMax > b.predictedMax ? a : b))
+    : null;
+  const selected = points.find((p) => p.hour === hour) ?? null;
+  const confLabel: Record<string, string> = { high: "높음", medium: "보통", low: "낮음" };
+
+  return (
+    <div style={{ ...s.panel, marginTop: spacing.md + 2 }}>
+      <div style={s.panelHeader}>
+        <div>
+          <div style={s.panelTitle}>📈 머신러닝 예측 (날짜별 인구)</div>
+          <div style={s.panelSub}>
+            <span style={s.panelDot} />
+            LightGBM 모델 · 장소·시각·요일 학습
+          </div>
+        </div>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => onDateChange(e.target.value)}
+          style={s.dateInput}
+        />
+      </div>
+
+      {loading && <div style={s.predNote}>예측을 불러오는 중…</div>}
+      {error && <div style={{ ...s.predNote, color: "#e5484d" }}>{error}</div>}
+
+      {!loading && !error && points.length > 0 && (
+        <>
+          <div style={s.predSummaryRow}>
+            <div style={s.predSummaryCard}>
+              <div style={s.statLabel}>예측 피크</div>
+              <div style={s.statBig}>{peak ? formatPopKo(peak.predictedMax) : "-"}</div>
+              <div style={s.smallCardSub}>{peak ? `${peak.label} · ${peak.congestionLevel}` : ""}</div>
+            </div>
+            <div style={s.predSummaryCard}>
+              <div style={s.statLabel}>
+                선택 시각&nbsp;
+                <select
+                  value={hour}
+                  onChange={(e) => onHourChange(Number(e.target.value))}
+                  style={s.hourSelect}
+                >
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                  ))}
+                </select>
+              </div>
+              <div style={s.statBig}>{selected ? formatPopKo(selected.predictedMax) : "-"}</div>
+              <div style={s.smallCardSub}>
+                {selected
+                  ? `${formatPopKo(selected.predictedMin)} ~ ${formatPopKo(selected.predictedMax)} · ${selected.congestionLevel}`
+                  : ""}
+              </div>
+            </div>
+          </div>
+
+          <PredictionCurve points={points} selectedHour={hour} />
+
+          <div style={s.predNote}>
+            {meta?.dayOfWeek ? `${date} (${meta.dayOfWeek}요일) ` : `${date} `}
+            예측 · 신뢰도 {confLabel[points[0].confidence] ?? "낮음"}
+            {points[0].confidence === "low" && " (데이터가 더 쌓이면 정확도가 올라갑니다)"}
+          </div>
+        </>
+      )}
+
+      {!loading && !error && points.length === 0 && (
+        <div style={s.predNote}>해당 날짜의 예측 데이터가 없습니다.</div>
+      )}
+    </div>
+  );
+}
+
+// 24시간 예측 곡선 (predictedMax). 선택 시각을 강조.
+function PredictionCurve({ points, selectedHour }: { points: DailyPoint[]; selectedHour: number }) {
+  const w = 720;
+  const h = 200;
+  const pad = 24;
+  const maxV = Math.max(...points.map((p) => p.predictedMax), 1);
+  const toX = (hour: number) => pad + (hour / 23) * (w - pad * 2);
+  const toY = (v: number) => pad + (1 - v / maxV) * (h - pad * 2);
+  const line = points
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${toX(p.hour).toFixed(1)} ${toY(p.predictedMax).toFixed(1)}`)
+    .join(" ");
+  const area = `${line} L ${toX(23).toFixed(1)} ${h - pad} L ${toX(0).toFixed(1)} ${h - pad} Z`;
+  const sel = points.find((p) => p.hour === selectedHour);
+
+  return (
+    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: "block", marginTop: spacing.md }}>
+      <defs>
+        <linearGradient id="predFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={colors.brand.accent} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={colors.brand.accent} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#predFill)" stroke="none" />
+      <path d={line} fill="none" stroke={colors.brand.accent} strokeWidth="2.5" strokeLinecap="round" />
+      {[0, 6, 12, 18, 23].map((hh) => (
+        <text key={hh} x={toX(hh)} y={h - 6} fontSize="10" fill={colors.text.secondary} textAnchor="middle">
+          {String(hh).padStart(2, "0")}시
+        </text>
+      ))}
+      {sel && (
+        <>
+          <line x1={toX(sel.hour)} y1={pad} x2={toX(sel.hour)} y2={h - pad}
+            stroke={colors.brand.accent} strokeWidth="1" strokeDasharray="4 3" opacity="0.5" />
+          <circle cx={toX(sel.hour)} cy={toY(sel.predictedMax)} r="5" fill={colors.brand.accent} />
+        </>
+      )}
+    </svg>
   );
 }
 
@@ -532,4 +739,38 @@ const s: Record<string, React.CSSProperties> = {
     fontFamily: "inherit",
   },
   card: { padding: spacing.lg + 2, borderRadius: radius.lg + 2, background: colors.bg.base, color: colors.text.primary },
+  dateInput: {
+    height: 34,
+    padding: `0 ${spacing.sm + 2}px`,
+    borderRadius: radius.md + 2,
+    border: `1px solid ${colors.border.light}`,
+    background: colors.bg.base,
+    color: colors.text.primary,
+    fontFamily: "inherit",
+    fontSize: typography.size.sm,
+    cursor: "pointer",
+  },
+  predSummaryRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: spacing.md, marginTop: spacing.sm },
+  predSummaryCard: {
+    borderRadius: radius.lg + 2,
+    border: `1px solid ${colors.border.light}`,
+    padding: spacing.md + 2,
+    background: colors.bg.subtle,
+  },
+  hourSelect: {
+    border: `1px solid ${colors.border.light}`,
+    borderRadius: radius.md,
+    background: colors.bg.base,
+    color: colors.text.primary,
+    fontFamily: "inherit",
+    fontSize: typography.size.xs,
+    padding: "2px 4px",
+    cursor: "pointer",
+  },
+  predNote: {
+    marginTop: spacing.md,
+    fontSize: typography.size.xs,
+    color: colors.text.secondary,
+    lineHeight: 1.5,
+  },
 };
